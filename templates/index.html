@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mini‑Lovable — Spec Generator</title>
+  <link rel="stylesheet" href="/static/css/styles.css" />
+</head>
+<body>
+  <header class="container">
+    <h1>Mini‑Lovable</h1>
+    <p class="muted">Type a prompt, get a Spec JSON.</p>
+  </header>
+
+  <main class="container">
+    <form id="promptForm" class="card">
+      <label for="prompt">Your prompt</label>
+      <textarea id="prompt" placeholder="Modern minimal landing page with hero, features, pricing, contact. Colors blue and white, serif headings." required></textarea>
+      <button type="submit">Generate Spec</button>
+    </form>
+
+    <section class="grid">
+      <div class="card">
+        <h2>Spec JSON</h2>
+        <pre id="output" class="codebox">{}</pre>
+      </div>
+      <div class="card">
+        <h2>Tips</h2>
+        <ul class="tips">
+          <li>Mention colors (blue/green/purple/dark/red) and font vibe (serif/mono).</li>
+          <li>Say pages you want: about, contact, products.</li>
+          <li>Add sections: hero, features, pricing, testimonials, faq.</li>
+        </ul>
+      </div>
+    </section>
+  </main>
+
+  <footer class="container foot">Built fast for hackathons ⚡</footer>
+  <script src="/static/js/main.js"></script>
+</body>
+</html>
