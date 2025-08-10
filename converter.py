@@ -4,13 +4,9 @@ import re
 import uuid
 from schema import Spec, Page, Section
 
-# Gemini-only converter: takes a natural-language prompt and returns Spec JSON
-# Requires GEMINI_API_KEY to be set. No local fallback.
-
 def _strip_code_fences(s: str) -> str:
     s = s.strip()
     if s.startswith("```"):
-        # remove ```json ... ``` or ``` ... ```
         s = re.sub(r"^```(?:json)?\s*|\s*```$", "", s, flags=re.S)
     return s.strip()
 
@@ -23,79 +19,58 @@ INSTRUCTIONS = (
     "Infer a website archetype (Generic/Company, E-commerce, SaaS, Portfolio, Restaurant, Clinic, Blog). "
     "Then produce 5–7 sensible pages for that archetype. Always include Home and Contact, usually About. "
     "Each page must have: route (URL path like '/about'), seo: {title, description}, and sections array. "
-    "Each section must be an object with: type (Hero|FeatureGrid|ProductGrid|Testimonials|Pricing|FAQ|RichText|ContactForm|CTA), id (UUID), and props (object). "
+    "Each section must be an object with: type (Hero|FeatureGrid|ProductGrid|Testimonials|Pricing|FAQ|RichText|ContactForm|CTA|Header|Footer), id (UUID), and props (object). "
     "Provide basic SEO (title, description) for each page. "
     "Prefer mobile-first structure. Use concise defaults when information is missing. "
     "Return ONLY valid JSON, no comments, no markdown fences."
 )
 
 def _normalize_data(data: dict) -> dict:
-    """Normalize the Gemini response to match our schema"""
-    # Normalize pages
     if 'pages' in data:
         normalized_pages = []
+
+        # Ensure required pages exist
+        required_routes = [('/', 'Home'), ('/about', 'About'), ('/services', 'Services'), ('/contact', 'Contact')]
+        existing_routes = {p.get('route', '').lower() for p in data['pages']}
+
+        for route, name in required_routes:
+            if route not in existing_routes:
+                data['pages'].append({
+                    'route': route,
+                    'seo': {'title': name, 'description': f'{name} page'},
+                    'sections': [{'id': str(uuid.uuid4()), 'type': 'Hero', 'props': {}}]
+                })
+
+        # Add Header & Footer to each page
+        for page in data['pages']:
+            if not any(s.get('type') == 'Header' for s in page['sections']):
+                page['sections'].insert(0, {'id': str(uuid.uuid4()), 'type': 'Header', 'props': {}})
+            if not any(s.get('type') == 'Footer' for s in page['sections']):
+                page['sections'].append({'id': str(uuid.uuid4()), 'type': 'Footer', 'props': {}})
+
+        # Normalize sections for schema compliance
         for page in data['pages']:
             normalized_page = {}
-            
-            # Handle route field
-            if 'route' not in page:
-                if 'name' in page:
-                    # Convert name to route
-                    route = page['name'].lower().replace(' ', '-')
-                    if route == 'home':
-                        route = '/'
-                    else:
-                        route = f'/{route}'
-                    normalized_page['route'] = route
-                else:
-                    normalized_page['route'] = '/'
-            else:
-                normalized_page['route'] = page['route']
-            
-            # Handle SEO
-            if 'seo' in page:
-                normalized_page['seo'] = page['seo']
-            elif 'name' in page:
-                # Generate basic SEO from name
-                normalized_page['seo'] = {
-                    'title': page['name'],
-                    'description': f'{page["name"]} page'
-                }
-            
-            # Handle sections
+            normalized_page['route'] = page.get('route', '/')
+            normalized_page['seo'] = page.get('seo', {'title': page.get('name', ''), 'description': f"{page.get('name', '')} page"})
             normalized_sections = []
-            if 'sections' in page:
-                for section in page['sections']:
-                    if isinstance(section, str):
-                        # Convert string to section object
-                        # Handle special case where Gemini might return unsupported section types
-                        section_type = section
-                        if section_type == 'ProjectGrid':
-                            section_type = 'ProductGrid'  # Map to supported type
-                        elif section_type == 'FeaturedProjects':
-                            section_type = 'ProductGrid'  # Map to supported type
-                        elif section_type not in ['Hero', 'FeatureGrid', 'ProductGrid', 'Testimonials', 'Pricing', 'FAQ', 'RichText', 'ContactForm', 'CTA']:
-                            section_type = 'RichText'  # Default fallback
-                        
-                        normalized_section = {
-                            'id': str(uuid.uuid4()),
-                            'type': section_type,
-                            'props': {}
-                        }
-                        normalized_sections.append(normalized_section)
-                    elif isinstance(section, dict):
-                        # Already in correct format, just ensure it has required fields
-                        if 'id' not in section:
-                            section['id'] = str(uuid.uuid4())
-                        if 'props' not in section:
-                            section['props'] = {}
-                        normalized_sections.append(section)
-            
+            for section in page.get('sections', []):
+                if isinstance(section, str):
+                    section_type = section
+                    if section_type not in ['Hero', 'FeatureGrid', 'ProductGrid', 'Testimonials', 'Pricing', 'FAQ', 'RichText', 'ContactForm', 'CTA', 'Header', 'Footer']:
+                        section_type = 'RichText'
+                    normalized_sections.append({'id': str(uuid.uuid4()), 'type': section_type, 'props': {}})
+                elif isinstance(section, dict):
+                    if 'id' not in section:
+                        section['id'] = str(uuid.uuid4())
+                    if 'props' not in section:
+                        section['props'] = {}
+                    normalized_sections.append(section)
             normalized_page['sections'] = normalized_sections
             normalized_pages.append(normalized_page)
-        
+
         data['pages'] = normalized_pages
-    
+
     return data
 
 def gemini_spec_from_prompt(prompt: str) -> Spec:
@@ -116,8 +91,8 @@ def gemini_spec_from_prompt(prompt: str) -> Spec:
     raw = getattr(resp, "text", "") or resp.candidates[0].content.parts[0].text
     raw = _strip_code_fences(raw)
     data = json.loads(raw)
-    
+
     # Normalize the data to match our schema
     data = _normalize_data(data)
-    
+
     return Spec(**data)

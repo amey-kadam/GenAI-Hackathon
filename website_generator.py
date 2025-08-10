@@ -65,6 +65,51 @@ class WebsiteGenerator:
     def get_fallback_component(self, section_type: str) -> str:
         """Fallback components if generation fails"""
         fallbacks = {
+            "Header": """import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
+
+export default function Header() {
+  const [open, setOpen] = useState(false);
+  return (
+    <header className="bg-background shadow sticky top-0 z-50">
+      <div className="max-w-6xl mx-auto px-4 flex justify-between items-center h-16">
+        <div className="text-xl font-bold text-primary">MySite</div>
+        <nav className="hidden md:flex space-x-6 font-body text-foreground">
+          <Link to="/" className="hover:text-primary">Home</Link>
+          <Link to="/about" className="hover:text-primary">About</Link>
+          <Link to="/services" className="hover:text-primary">Services</Link>
+          <Link to="/contact" className="hover:text-primary">Contact</Link>
+        </nav>
+        <button className="md:hidden text-foreground" onClick={() => setOpen(!open)}>☰</button>
+      </div>
+      {open && (
+        <div className="md:hidden bg-background border-t">
+          <Link to="/" className="block px-4 py-2 hover:bg-gray-100">Home</Link>
+          <Link to="/about" className="block px-4 py-2 hover:bg-gray-100">About</Link>
+          <Link to="/services" className="block px-4 py-2 hover:bg-gray-100">Services</Link>
+          <Link to="/contact" className="block px-4 py-2 hover:bg-gray-100">Contact</Link>
+        </div>
+      )}
+    </header>
+  );
+}""",
+            "Footer": """import React from 'react';
+
+export default function Footer() {
+  return (
+    <footer className="bg-background border-t py-6 mt-10">
+      <div className="max-w-6xl mx-auto px-4 flex flex-col md:flex-row justify-between items-center text-sm text-foreground">
+        <div className="mb-4 md:mb-0">© {new Date().getFullYear()} MySite. All rights reserved.</div>
+        <div className="space-x-4">
+          <a href="#" className="hover:text-primary">Privacy Policy</a>
+          <a href="#" className="hover:text-primary">Terms of Service</a>
+          <a href="/contact" className="hover:text-primary">Contact</a>
+        </div>
+      </div>
+    </footer>
+  );
+}""",
+
             "Hero": """import React from 'react';
 
 export default function Hero() {
@@ -384,12 +429,44 @@ export default function {section_type}() {{
 
     def generate_page(self, page: Page, spec: Spec) -> str:
         """Generate a complete page component"""
+        # Track which components we've imported
+        imported_components = set()
         sections_import = []
         sections_jsx = []
         
+        # Check if Header and Footer are already in the page sections
+        section_types = [section.type for section in page.sections]
+        has_header = "Header" in section_types
+        has_footer = "Footer" in section_types
+        
+        # Determine page name for unique components if needed
+        page_name = page.route.replace('/', '').title() or 'Home'
+        
+        # Add Header at the beginning - use unique component name if multiple pages
+        if not has_header:
+            header_component = f"{page_name}Header" if page_name != 'Home' else "Header"
+            sections_import.append(f"import {header_component} from '../components/{header_component}';")
+            sections_jsx.append(f"      <{header_component} />")
+            imported_components.add(header_component)
+        
+        # Add all sections from the page
         for section in page.sections:
-            sections_import.append(f"import {section.type} from '../components/{section.type}';")
-            sections_jsx.append(f"      <{section.type} />")
+            component_name = section.type
+            # Make section components unique to this page if not Header/Footer
+            if component_name not in ['Header', 'Footer'] and page_name != 'Home':
+                component_name = f"{page_name}{section.type}"
+            
+            if component_name not in imported_components:
+                sections_import.append(f"import {component_name} from '../components/{component_name}';")
+                imported_components.add(component_name)
+            sections_jsx.append(f"      <{component_name} />")
+        
+        # Add Footer at the end - use unique component name if multiple pages
+        if not has_footer:
+            footer_component = f"{page_name}Footer" if page_name != 'Home' else "Footer"
+            if footer_component not in imported_components:
+                sections_import.append(f"import {footer_component} from '../components/{footer_component}';")
+            sections_jsx.append(f"      <{footer_component} />")
         
         imports = "\n".join(sections_import)
         jsx_sections = "\n".join(sections_jsx)
@@ -397,7 +474,7 @@ export default function {section_type}() {{
         page_code = f"""import React from 'react';
 {imports}
 
-export default function {page.route.replace('/', '').title() or 'Home'}Page() {{
+export default function {page_name}Page() {{
   return (
     <div className="min-h-screen">
 {jsx_sections}
@@ -633,21 +710,71 @@ npm run dev
             with open(os.path.join(src_dir, 'App.jsx'), 'w', encoding='utf-8') as f:
                 f.write(self.generate_app_component(spec.pages))
             
-            # Generate components
+            # Generate components - create unique components for each page
             generated_components = set()
+            
             for page in spec.pages:
+                page_name = page.route.replace('/', '').title() or 'Home'
+                
+                # Generate unique Header and Footer for non-Home pages
+                if page_name != 'Home':
+                    # Generate unique Header
+                    header_name = f"{page_name}Header"
+                    if header_name not in generated_components:
+                        header_code = self.get_fallback_component("Header").replace("export default function Header()", f"export default function {header_name}()")
+                        with open(os.path.join(components_dir, f'{header_name}.jsx'), 'w', encoding='utf-8') as f:
+                            f.write(header_code)
+                        generated_components.add(header_name)
+                    
+                    # Generate unique Footer
+                    footer_name = f"{page_name}Footer"
+                    if footer_name not in generated_components:
+                        footer_code = self.get_fallback_component("Footer").replace("export default function Footer()", f"export default function {footer_name}()")
+                        with open(os.path.join(components_dir, f'{footer_name}.jsx'), 'w', encoding='utf-8') as f:
+                            f.write(footer_code)
+                        generated_components.add(footer_name)
+                else:
+                    # Generate standard Header and Footer for Home page
+                    if "Header" not in generated_components:
+                        header_code = self.get_fallback_component("Header")
+                        with open(os.path.join(components_dir, 'Header.jsx'), 'w', encoding='utf-8') as f:
+                            f.write(header_code)
+                        generated_components.add("Header")
+                    
+                    if "Footer" not in generated_components:
+                        footer_code = self.get_fallback_component("Footer")
+                        with open(os.path.join(components_dir, 'Footer.jsx'), 'w', encoding='utf-8') as f:
+                            f.write(footer_code)
+                        generated_components.add("Footer")
+                
+                # Generate page-specific section components
                 for section in page.sections:
-                    if section.type not in generated_components:
-                        print(f"Generating component: {section.type}")
-                        component_code = self.generate_component(section, spec.designTokens.model_dump())
+                    component_name = section.type
+                    if component_name not in ['Header', 'Footer'] and page_name != 'Home':
+                        component_name = f"{page_name}{section.type}"
+                    
+                    if component_name not in generated_components:
+                        print(f"Generating component: {component_name}")
+                        
+                        if section.type in ['Header', 'Footer']:
+                            # Use fallback for Header/Footer sections
+                            component_code = self.get_fallback_component(section.type)
+                        else:
+                            # Generate custom component
+                            component_code = self.generate_component(section, spec.designTokens.model_dump())
                         
                         # Ensure component_code is a string
                         if not isinstance(component_code, str):
-                            print(f"Warning: Component code for {section.type} is not a string: {type(component_code)}")
+                            print(f"Warning: Component code for {component_name} is not a string: {type(component_code)}")
                             component_code = self.get_fallback_component(section.type)
                         
-                        with open(os.path.join(components_dir, f'{section.type}.jsx'), 'w', encoding='utf-8') as f:
+                        # Update component name in code if it's a page-specific component
+                        if page_name != 'Home' and section.type not in ['Header', 'Footer']:
+                            component_code = component_code.replace(f"export default function {section.type}()", f"export default function {component_name}()")
+                        
+                        with open(os.path.join(components_dir, f'{component_name}.jsx'), 'w', encoding='utf-8') as f:
                             f.write(component_code)
+                        generated_components.add(component_name)
                         generated_components.add(section.type)
             
             # Generate pages

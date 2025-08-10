@@ -28,6 +28,23 @@ Requirements:
 """
 
         specific_requirements = {
+          "Header": """
+- A sticky navigation bar with logo on the left and navigation links on the right
+- Mobile-friendly hamburger menu
+- Use Tailwind CSS only
+- Use colors from design tokens for background and text
+- Include links: Home, About, Services, Contact
+- Modern, clean style
+""",
+"Footer": """
+- Footer with company name/logo on the left
+- Links: Privacy Policy, Terms of Service, Contact
+- Responsive design
+- Use Tailwind CSS only
+- Small text copyright
+- Background color from design tokens
+""",
+
             "Hero": """
 - Large hero section with background
 - Main headline and subheadline  

@@ -3,6 +3,7 @@ from pydantic import BaseModel, Field
 import uuid
 
 SectionType = Literal[
+    "Header", "Footer",  # New types
     "Hero", "FeatureGrid", "ProductGrid", "Testimonials", "Pricing", "FAQ", "RichText", "ContactForm", "CTA"
 ]
 
